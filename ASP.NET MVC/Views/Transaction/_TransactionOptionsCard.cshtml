@@ -1,0 +1,110 @@
+<script type="text/javascript">
+    var previousTitle;
+
+    function showCardTransaction() {
+        DebitCheckForLimit(0, function (overDebitLimit) {
+            CreditCheckForLimit(0, function (overCreditLimit) {
+                $("#modal-loading").modal("hide");
+                if (overCreditLimit !== true || overDebitLimit !== true) {
+                    $("#transactionCard").removeClass("d-none");
+                    $("#personInfoCard").addClass("d-none");
+                    if (!$("#achTrxCard").hasClass("d-none") ||
+                        !$("#achEnrollCard").hasClass("d-none")) {
+                        $("#modal-person-dl-match .modal-title").html(previousTitle);
+                    }
+                    $("#achTrxCard").addClass("d-none");
+                    $("#achEnrollCard").addClass("d-none");
+                    var tabbableElements = $('a[href]:not([href^="#"]), area[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), iframe, object, embed, *[tabindex], *[contenteditable]');
+                    setupModalEvents("#modal-person-dl-match", tabbableElements);
+                    disableTabbingOnPage(tabbableElements);
+                    enableTabbingOnModal(tabbableElements);
+                    [anElement1, anElement2, anElement3] = new AutoNumeric.multiple(["#transactionCard #amount", "#transactionCard #creditfee", "#transactionCard #debitfee"], { minimumValue: 0 });
+                    @{
+                            @:$("#waiveFees").html('<button id="btnWaiveFees" class="btn btn-primary">Waive Fees</button>');
+                            <text>
+                    $("#btnWaiveFees").click(function (e) {
+                        supervisorOverrideType = "waiveFees"
+                        $("#modal-supervisorOverride").modal("toggle");
+
+                    });
+                            </text>
+                    }
+
+                    var width = Math.round($("#divTrxData").width() * 1.5);
+                    $("#master-modal-container").attr("style", "max-width: " + width + "px!important;");
+
+                    swal({
+                        title: "Insert Card",
+                        text: "Instruct person to insert their card",
+                        type: "info",
+                        showCancelButton: false,
+                        confirmButtonClass: 'btn-primary',
+                        confirmButtonText: 'OK'
+                    },
+                        function () {
+                            $("#transactionCard #amount").focus();
+                        }
+                    );
+                }
+            });
+        });
+    }
+
+    function postToCompletePreAuth() {
+        $.ajax({
+            data: {
+                'personID': $("#PlayerDetailDiv #ID").val().toString(),
+                'dlImage': $("#modal-person-dl-match #personCardImage").attr("src").replace("data:image/jpg;base64, ", "")
+            },
+            type: 'POST',
+            url: '@Url.Action("CompletePreAuth", "Transaction")',
+            success: function (result) {
+                document.open();
+                document.write(result);
+                document.close();
+            },
+            error: function (data) {
+                swal({
+                    title: "Error!",
+                    text: "Unknown Error.",
+                    type: "error",
+                    showCancelButton: false,
+                    confirmButtonClass: 'btn-danger',
+                    confirmButtonText: 'Close'
+                });
+            }
+        });
+    }
+
+    function showACHTransaction() {
+        ACH_CheckForLimit(0, function (overLimit) {
+            if (overLimit !== true) {
+                previousTitle = $("#modal-person-dl-match .modal-title").html();
+                $("#modal-person-dl-match .modal-title").html("ACH Transaction");
+                $("#transactionCard").addClass("d-none");
+                $("#personInfoCard").addClass("d-none");
+                $("#achTrxCard").removeClass("d-none");
+                $("#achEnrollCard").addClass("d-none");
+                $.connection.hub.url = "http://127.0.0.1:4321/signalr";
+                $.connection.hub.start();
+                SetupACH($.connection.myHub, "ACHModal", $("#PlayerDetailDiv #ID").val());
+                var width = Math.round($("#ACHModal").width() * 1.5);
+                $("#master-modal-container").attr("style", "max-width: " + width + "px!important;");
+            }
+        });
+    }
+
+    function showACHEnroll() {
+        previousTitle = $("#modal-person-dl-match .modal-title").html();
+        $("#modal-person-dl-match .modal-title").html("ACH Enrollment");
+        $("#transactionCard").addClass("d-none");
+        $("#personInfoCard").addClass("d-none");
+        $("#achTrxCard").addClass("d-none");
+        $("#achEnrollCard").removeClass("d-none");
+        $.connection.hub.url = "http://127.0.0.1:4321/signalr";
+        $.connection.hub.start();
+        SetupACHEnroll($.connection.myHub, $("#PlayerDetailDiv #ID").val());
+        var width = Math.round($("#ACHEnrollModalContent").width() * 1.5);
+        $("#master-modal-container").attr("style", "max-width: " + width + "px!important;");
+    }
+</script>
