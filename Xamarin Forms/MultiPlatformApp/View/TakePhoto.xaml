@@ -1,0 +1,50 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://xamarin.com/schemas/2014/forms"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:d="http://xamarin.com/schemas/2014/forms/design"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             x:Class="CitationMobile.View.TakePhoto">
+    <ContentPage.Resources>
+        <StyleSheet Source="styles.css" />
+    </ContentPage.Resources>
+    <ContentPage.Content>
+        <AbsoluteLayout Padding="0" HorizontalOptions="FillAndExpand" VerticalOptions="FillAndExpand">
+            <StackLayout AbsoluteLayout.LayoutBounds="0, 0, 1, 1" AbsoluteLayout.LayoutFlags="All">
+                <Grid HorizontalOptions="FillAndExpand" VerticalOptions="FillAndExpand">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="40" />
+                        <RowDefinition Height="40" />
+                    </Grid.RowDefinitions>
+
+                    <Image x:Name="PhotoImage" Grid.Row="0" Grid.ColumnSpan="2" />
+                    <Button x:Name="CameraButton" FontSize="Small" Text="Take Photo" Grid.Row="1" Grid.Column="0" />
+                    <Button x:Name="DeleteButton" FontSize="Small" Text="Delete Photo" Grid.Row="1" Grid.Column="1" />
+                    <Button x:Name="BackButton" FontSize="Small" Text="Back to Photo List" Grid.Row="2" Grid.ColumnSpan="2" />
+                </Grid>
+            </StackLayout>
+            <ContentView x:Name="popupImageMetadata" BackgroundColor="#C0808080" Padding="10, 0" IsVisible="false" AbsoluteLayout.LayoutBounds="0, 0, 1, 1" AbsoluteLayout.LayoutFlags="All">
+                <StackLayout VerticalOptions="Center" HorizontalOptions="Center">
+                    <Grid BackgroundColor="White" VerticalOptions="Center">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="34" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150" />
+                            <ColumnDefinition Width="150" />
+                        </Grid.ColumnDefinitions>
+                        <Entry x:Name="popupFileName" Grid.Row="0" Grid.ColumnSpan="2" Margin="20,20,20,0" Placeholder="Enter Filename" FontSize="Medium" FontFamily="{StaticResource NormalFont}"></Entry>
+                        <Label Text="Category:" Grid.Row="1" Grid.Column="0" Margin="20,0,20,0" HeightRequest="30" FontSize="Small" FontAttributes="Bold" FontFamily="{StaticResource BoldFont}" VerticalTextAlignment="Center"></Label>
+                        <Label x:Name="popupCategory" Grid.Row="1" Grid.Column="1" Text="" Margin="20,0,20,0" HeightRequest="30" FontSize="Small" FontFamily="{StaticResource NormalFont}" VerticalTextAlignment="Center"></Label>
+                        <Button x:Name="UploadPhotoButton" Grid.Row="2" Grid.Column="0" Margin="20,0,20,20" Text="Upload" HeightRequest="30" WidthRequest="140" FontSize="Small" FontFamily="{StaticResource NormalFont}"></Button>
+                        <Button x:Name="CancelUploadPhotoButton" Grid.Row="2" Grid.Column="1" Margin="20,0,20,20" Text="Cancel" HeightRequest="30" WidthRequest="140" FontSize="Small" FontFamily="{StaticResource NormalFont}"></Button>
+                    </Grid>
+                </StackLayout>
+            </ContentView>
+        </AbsoluteLayout>
+    </ContentPage.Content>
+    <!--Popup Area-->
+</ContentPage>
