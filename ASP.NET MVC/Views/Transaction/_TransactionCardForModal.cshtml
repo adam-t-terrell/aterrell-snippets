@@ -1,0 +1,1015 @@
+<script type="text/javascript">
+    var DeviceCommForTrx;
+    var AmountEnteredByClerk;
+    var TransactionIdForCurrentTransaction;
+
+    $(function () {
+        //check if DeviceComm is available
+        $.getScript("http://127.0.0.1:4321/signalr/hubs")
+            .done(function (script, textStatus) {
+                console.log('before initChipDNAHub trx')
+                if (DeviceCommForTrx == undefined) {
+                    console.log('inside if initChipDNAHub trx');
+                    initChipDNAHub();
+                }
+                console.log('after initChipDNAHub if trx');
+            })
+            .fail(function (jqxhr, settings, exception) {
+
+            });
+
+        $('#transactionCard #smartwizard-trx-amount-and-fees').smartWizard({
+            autoAdjustHeight: true,
+            backButtonSupport: false,
+            useURLhash: false,
+            showStepURLhash: false,
+        });
+
+        $('#modal-trx-processing #smartwizard-trx-processing').smartWizard({
+            autoAdjustHeight: true,
+            backButtonSupport: false,
+            useURLhash: false,
+            showStepURLhash: false,
+        });
+
+        $("#transactionCard #amount").on("input", function (e) {
+            $("#transactionCard #btnCalcFee").removeClass("btn-secondary");
+            $("#transactionCard #btnCalcFee").addClass("btn-primary");
+            $("#transactionCard #btnCalcFee").prop("disabled", false);
+        })
+
+        $("#transactionCard #amount").blur(function (e) {
+            if ($("#transactionCard #amount").val() !== "") {
+                if (!waiving) {
+                    CalculatingFees();
+                    $("#transactionCard #debitfee").val(debitFees);
+                    $("#transactionCard #creditfee").val(creditFees);
+                }
+                $("#transactionCard #btnBegin").removeClass("btn-secondary");
+                $("#transactionCard #btnBegin").addClass("btn-primary");
+                $("#transactionCard #btnBegin").prop("disabled", false);
+                $("#transactionCard #btnBegin").focus();
+
+                $('#transactionCard #smartwizard-trx-amount-and-fees').smartWizard('next');
+            }
+        })
+
+        $("#transactionCard #btnCalcFee").click(function (e) {
+            waiving = false;
+            CalculatingFees();
+            $("#transactionCard #debitfee").val(debitFees);
+            $("#transactionCard #creditfee").val(creditFees);
+            $("#transactionCard #btnBegin").removeClass("btn-secondary");
+            $("#transactionCard #btnBegin").addClass("btn-primary");
+            $("#transactionCard #btnBegin").prop("disabled", false);
+            $("#transactionCard #btnBegin").focus();
+
+            //$('#transactionCard #smartwizard-trx-amount-and-fees').smartWizard('next');
+        })
+
+        $("#transactionCard #btnBegin").click(function (e) {
+            if (debitFees != null && creditFees != null && $("#transactionCard #amount").val() != null && $("#transactionCard #amount").val() != "" && ($("#transactionCard #amount").val() * 1.0) != 0 ) {
+                $('#modal-trx-processing #smartwizard-trx-processing').smartWizard('reset');
+                var tabbableElements = $('a[href]:not([href^="#"]), area[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), iframe, object, embed, *[tabindex], *[contenteditable]');
+                setupModalEvents("#modal-trx-processing", tabbableElements);
+                disableTabbingOnPage(tabbableElements);
+                enableTabbingOnModal(tabbableElements, "#modal-trx-processing");
+                if ($("#transactionCard #btnBegin").is(":focus")) {
+                    $("#transactionCard #btnBegin").blur();
+                }
+                $("#modal-trx-processing").modal({ backdrop: 'static', focus: true, show: true, keyboard: false });
+                var amount = $("#transactionCard #amount").val().replace(',','') * 1.0;
+                var amountfees = debitFees;
+                var amountType = "Actual";
+
+                var terminalLanguage = "eng";
+                var transactionType = "Sale";
+                var json = '{ Amount: "' + amount +
+                    '", AmountType: "' + amountType +
+                    '", Fee: "' + amountfees +
+                    '", TerminalLanguage: "' + terminalLanguage +
+                    '", TransactionType: "' + transactionType + '" }';
+                console.log(json);
+                console.log('before');
+                DeviceCommForTrx.server.chipDNAClosePassThruSession();
+                DeviceCommForTrx.server.chipDNAStartTransaction(json);
+                console.log('after');
+            }
+
+            if (($("#transactionCard #amount").val() * 1.0) == 0 ) {
+                swal({
+                    title: "Error!",
+                    text: "Amount is zero, please enter a non-zero amount and recalc fees",
+                    type: "error",
+                    showCancelButton: false,
+                    confirmButtonClass: 'btn-danger',
+                    confirmButtonText: 'Close'
+                },
+                    function () {
+                        $("#transactionCard #btnBegin").removeClass("btn-primary");
+                        $("#transactionCard #btnBegin").addClass("btn-secondary");
+                        $("#transactionCard #btnBegin").prop("disabled", true);
+                        $("#transactionCard #amount").focus();
+                    }
+                );
+            }
+        })
+
+        $("#modal-trx-processing #btnCancelTrx").click(function (e) {
+            console.log('referenceNumber:');
+            console.log(referenceNumber);
+            DeviceCommForTrx.server.chipDNATerminateTransaction('Canceled By Attendent');
+            //DeviceCommForTrx.server.chipDNAVoidTransaction(referenceNumber);
+            $("#modal-trx-processing").modal("hide");
+            ResetProcessing();
+        })
+    });
+
+    function CalculatingFees() {
+        if (!waiving) {
+            console.log('Calculating Fees');
+            var jsonRequest = '{ "amount": "' + $("#transactionCard #amount").val().replace(',', '') + '" } ';
+            console.log(jsonRequest);
+            $.ajax({
+                type: "POST",
+                url: '@Url.Action("CalculateFees", "Transaction")',
+                dataType: "html",
+                data: jsonRequest,
+                contentType: 'application/json',
+                success: function (data) {
+                    var results = JSON.parse(JSON.parse(data));
+                    console.log('results json');
+                    console.log(results);
+                    debitFees = results.debitFees.replace('$', '');
+                    creditFees = results.creditFees.replace('$', '')
+                    $("#transactionCard #debitfee").val(results.debitFees.replace('$', ''));
+                    $("#transactionCard #creditfee").val(results.creditFees.replace('$', ''));
+                    console.log('debitFees');
+                    console.log(debitFees);
+                    console.log('creditFees');
+                    console.log(creditFees);
+                    $('#transactionCard #smartwizard-trx-amount-and-fees').smartWizard('next');
+                },
+                error: function (data) {
+
+                }
+            });
+        }
+    }
+
+    function CreditCheckForLimit(checkAmount, callback) {
+        $("#loading-message").text("Checking for Credit Limits...");
+        $("#modal-loading").modal("show");
+        $("#personCreditLimit").text("");
+        $("#personCreditLimit").removeClass("text-danger");
+
+        $.ajax({
+            type: "POST",
+            url: '@Url.Action("CheckForLimit", "Transaction")',
+            dataType: "html",
+            data: '{ "personID" : ' + personid + ', "amount" : ' + checkAmount + ', "type": "Credit" }',
+            contentType: 'application/json',
+            success: function (data) {
+                var limitResults = JSON.parse(data);
+                console.log('limit check results json using amount=' + checkAmount);
+                console.log(limitResults);
+
+                if (limitResults.success) {
+                    if (limitResults.hardStop) {
+                        $("#personCreditLimit").removeClass("hidden");
+                        $("#personCreditLimit").text("Credit Limit Remaining: $" + limitResults.personAmountRemaining.toFixed(2));
+                        if (limitResults.personAmountRemaining <= 0) {
+                            $("#personCreditLimit").addClass("text-danger");
+                        }
+                        if (limitResults.overLimit) {
+                            swal({
+                                title: "Over Credit Limit",
+                                text: limitResults.message,
+                                type: "error",
+                                showCancelButton: false,
+                                confirmButtonClass: "btn-Danger",
+                                confirmButtonText: "Okay"
+                            },
+                            function () {
+                                callback(limitResults.overLimit);
+                            });
+                        }
+                        else {
+                            callback(limitResults.overLimit);
+                        }
+                    }
+                    else {
+                        $("#personCreditLimit").addClass("hidden");
+                        if (limitResults.overLimit) {
+                            swal({
+                                title: "Over Credit Limit",
+                                text: limitResults.message,
+                                type: "warning",
+                                showCancelButton: false,
+                                confirmButtonClass: "btn-Primary",
+                                confirmButtonText: "Okay"
+                            },
+                            function () {
+                                callback(limitResults.overLimit);
+                            });
+                        }
+                        else {
+                            callback(limitResults.overLimit);
+                        }
+                    }
+                }
+                else {
+                    swal({
+                        title: "Error",
+                        text: limitResults.message,
+                        type: "error",
+                        showCancelButton: false,
+                        confirmButtonClass: "btn-Danger",
+                        confirmButtonText: "Okay"
+                    },
+                    function () {
+                        $("#personCreditLimit").addClass("hidden");
+                        callback(false);
+                    });
+                }
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                swal({
+                    title: "Error",
+                    text: "Status: " + textStatus + "<br />" + errorThrown,
+                    type: "error",
+                    showCancelButton: false,
+                    confirmButtonClass: "btn-Danger",
+                    confirmButtonText: "Okay"
+                },
+                function () {
+                    $("#personCreditLimit").addClass("hidden");
+                    callback(false);
+                });
+            }
+        });
+    }
+
+    function DebitCheckForLimit(checkAmount, callback) {
+        $("#loading-message").text("Checking for Debit Limits...");
+        $("#modal-loading").modal("show");
+        $("#personDebitLimit").text("");
+        $("#personDebitLimit").removeClass("text-danger");
+
+        $.ajax({
+            type: "POST",
+            url: '@Url.Action("CheckForLimit", "Transaction")',
+            dataType: "html",
+            data: '{ "personID" : ' + personid + ', "amount" : ' + checkAmount + ', "type": "Debit" }',
+            contentType: 'application/json',
+            success: function (data) {
+                var limitResults = JSON.parse(data);
+                console.log('limit check results json using amount=' + checkAmount);
+                console.log(limitResults);
+
+                if (limitResults.success) {
+                    if (limitResults.hardStop) {
+                        $("#personDebitLimit").removeClass("hidden");
+                        $("#personDebitLimit").text("Debit Limit Remaining: $" + limitResults.personAmountRemaining.toFixed(2));
+                        if (limitResults.personAmountRemaining <= 0) {
+                            $("#personDebitLimit").addClass("text-danger");
+                        }
+                        if (limitResults.overLimit) {
+                            swal({
+                                title: "Over Debit Limit",
+                                text: limitResults.message,
+                                type: "error",
+                                showCancelButton: false,
+                                confirmButtonClass: "btn-Danger",
+                                confirmButtonText: "Okay"
+                            },
+                            function () {
+                                callback(limitResults.overLimit);
+                            });
+                        }
+                        else {
+                            $("#personDebitLimit").addClass("hidden");
+                            callback(limitResults.overLimit);
+                        }
+                    }
+                    else {
+                        $("#personDebitLimit").addClass("hidden");
+                        if (limitResults.overLimit) {
+                            swal({
+                                title: "Over Debit Limit",
+                                text: limitResults.message,
+                                type: "warning",
+                                showCancelButton: false,
+                                confirmButtonClass: "btn-Primary",
+                                confirmButtonText: "Okay"
+                            },
+                            function () {
+                                callback(limitResults.overLimit);
+                            });
+                        }
+                        else {
+                            callback(limitResults.overLimit);
+                        }
+                    }
+                }
+                else {
+                    swal({
+                        title: "Error",
+                        text: limitResults.message,
+                        type: "error",
+                        showCancelButton: false,
+                        confirmButtonClass: "btn-Danger",
+                        confirmButtonText: "Okay"
+                    },
+                    function () {
+                        $("#personDebitLimit").addClass("hidden");
+                        callback(false);
+                    });
+                }
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                swal({
+                    title: "Error",
+                    text: "Status: " + textStatus + "<br />" + errorThrown,
+                    type: "error",
+                    showCancelButton: false,
+                    confirmButtonClass: "btn-Danger",
+                    confirmButtonText: "Okay"
+                },
+                function () {
+                    $("#personDebitLimit").addClass("hidden");
+                    callback(false);
+                });
+            }
+        });
+    }
+
+    function ResetProcessing() {
+        $('#transactionCard #smartwizard-trx-amount-and-fees').smartWizard('reset');
+        $('#modal-trx-processing #smartwizard-trx-processing').smartWizard('reset');
+        var tabbableElements = $('a[href]:not([href^="#"]), area[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), iframe, object, embed, *[tabindex], *[contenteditable]');
+        disableTabbingOnPage(tabbableElements);
+        enableTabbingOnModal(tabbableElements);
+        CalculatingFees();
+        $("#transactionCard #btnBegin").focus();
+    }
+
+    function LogThenPrint(rawTransactionResult, dlImage, disposition, operation, personid, personidcredentialid) {
+        $("#loading-message").text("Logging Transaction and Printing Receipt...");
+        $("#modal-loading").modal("show");
+        console.log('Start of LogTransaction call');
+        var amount = $("#transactionCard #amount").val().replace(',', '');
+        amount = amount * 1.0;
+
+        if (dlImage == null || dlImage === null || dlImage === 'undefined' ) {
+            dlImage = "";
+        }
+
+        var jsonRequest = '{ "rawJson": "' + JSON.stringify(rawTransactionResult).replace(/"/g, '\\"') +
+            '", "dlImage": "' + dlImage +
+            '", "referenceNumber": "' + referenceNumber +
+            '", "disposition": "' + disposition +
+            '", "operation": "' + operation +
+            '", "personid": "' + personid +
+            '", "personidcredentialid": "' + personidcredentialid +
+            '", "amount": ' + amount +
+            ', "additionalAmount": ' + additionalFees +
+            ', "terminalid": "' + terminalid + '" } ';
+        console.log(jsonRequest);
+        $.ajax({
+            type: "POST",
+            url: '@Url.Action("LogTransaction", "Transaction")',
+            dataType: "html",
+            data: jsonRequest,
+            contentType: 'application/json',
+            success: function (data) {
+                var results = JSON.parse(data);
+                console.log('Log Transaction results json');
+                console.log(results);
+                PrintReceipt(rawTransactionResult.ReceiptLines, personid);
+                $("#modal-loading").modal("hide");
+            },
+            error: function (data) {
+                $("#modal-loading").modal("hide");
+            }
+        });
+    }
+
+    function LogTransaction(rawTransactionResult, dlImage, disposition, operation, personid, personidcredentialid) {
+        console.log('Start of LogTransaction call');
+        var amount = $("#transactionCard #amount").val().replace(',', '');
+        amount = amount * 1.0;
+
+        if (dlImage == null || dlImage === null || dlImage === 'undefined' ) {
+            dlImage = "";
+        }
+
+        var jsonRequest = '{ "rawJson": "' + JSON.stringify(rawTransactionResult).replace(/"/g, '\\"') +
+            '", "dlImage": "' + dlImage +
+            '", "referenceNumber": "' + referenceNumber +
+            '", "disposition": "' + disposition +
+            '", "operation": "' + operation +
+            '", "personid": "' + personid +
+            '", "personidcredentialid": "' + personidcredentialid +
+            '", "amount": ' + amount +
+            ', "additionalAmount": ' + additionalFees +
+            ', "terminalid": "' + terminalid + '" } ';
+        $.ajax({
+            type: "POST",
+            url: '@Url.Action("LogTransaction", "Transaction")',
+            dataType: "html",
+            data: jsonRequest,
+            contentType: 'application/json',
+            success: function (data) {
+                var results = JSON.parse(data);
+                g_transactionId = results.transactionId;//setting transaction Id since we need it for saving TransactionPayouts
+                g_IsPayoutCashOnlyForCurrentCasino = results.IsPayoutCashOnlyForCurrentCasino;
+            },
+            error: function (data) {
+                  g_transactionId = data.transactionId;
+            }
+        });
+    }
+
+    function initChipDNAHub() {
+        //Set the hubs URL for the connection
+        $.connection.hub.url = "http://127.0.0.1:4321/signalr";
+
+        // Declare a proxy to reference the hub.
+        DeviceCommForTrx = $.connection.myHub;
+        //listens to info messages from verifone
+        DeviceCommForTrx.on('chipDNAInfoMessage', function (message) {
+            var jsonResult = JSON.parse(message);
+
+            //Captures referenceNumber from DeviceCommForTrx to be used in transaction confirmation and transaction logging.
+            if (jsonResult.EventName === 'PerformStartTransaction') {
+                referenceNumber = jsonResult.InfoMessage;
+                //this is to ensure at the start of a new transaction this flag has been reset
+                creditReset = false;
+            }
+
+            @{var u = new Cash.DataAccess.UserDataAccess().GetUserByUserName(User.Identity.Name);}
+            var eData = jsonResult.EventData;
+            //Begin checking for the messages
+            if (eData.find(element => element.Value === 'Inserted') !== undefined) {
+                $('#modal-trx-processing #smartwizard-trx-processing').smartWizard('next');
+                $("#modal-trx-processing #smartwizard-trx-processing-step1-text").html('Customer Has Inserted Card');
+            }
+            else if (eData.find(element => element.Key === 'TRACK2_MASKED') !== undefined) {
+                $('#modal-trx-processing #smartwizard-trx-processing').smartWizard('next');
+                $("#modal-trx-processing #smartwizard-trx-processing-step2-text").html('Transaction Processing');
+            }
+            else if (eData.find(element => element.Value === 'OnlineAuthCompleted') !== undefined) {
+                //$('#modal-trx-processing #smartwizard-trx-processing').smartWizard('next');
+            }
+            //Catch Timeout Error
+            else if (eData.find(element => element.Key === 'ERRORS' && element.Value === 'CardHolderActionTimedOut') !== undefined
+                && jsonResult.EventName === 'TransactionFinished') {
+                swal({
+                    title: "Error!",
+                    text: "Customer Timed Out",
+                    type: "error",
+                    showCancelButton: false,
+                    confirmButtonClass: 'btn-danger',
+                    confirmButtonText: 'Close'
+                },
+                    function () {
+                        DeviceCommForTrx.server.chipDNAClosePassThruSession();
+                        initFormPassthrough = true;
+                        DeviceCommForTrx.server.chipDNAOpenPassThruSession();
+                        $("#modal-trx-processing").modal("hide");
+                        ResetProcessing();
+                    }
+                );
+            }
+            //CardChip Removed Error
+            else if (eData.find(element => element.Key === 'ERRORS' && element.Value === 'ChipCardRemoved') !== undefined
+                && jsonResult.EventName === 'TransactionFinished') {
+                swal({
+                    title: "Error!",
+                    text: "Customer Removed Chip Card during Transaction",
+                    type: "error",
+                    showCancelButton: false,
+                    confirmButtonClass: 'btn-danger',
+                    confirmButtonText: 'Close'
+                },
+                    function () {
+                        DeviceCommForTrx.server.chipDNAClosePassThruSession();
+                        initFormPassthrough = true;
+                        DeviceCommForTrx.server.chipDNAOpenPassThruSession();
+                        $("#modal-trx-processing").modal("hide");
+                        ResetProcessing();
+                    }
+                );
+            }
+            //Clerk Cancels Transaction
+            else if (eData.find(element => element.Key === 'ERRORS' && element.Value === 'EposTransactionTerminated') !== undefined
+                && jsonResult.EventName === 'TransactionFinished') {
+
+                DeviceCommForTrx.server.chipDNAClosePassThruSession();
+                initFormPassthrough = true;
+                DeviceCommForTrx.server.chipDNAOpenPassThruSession();
+                $("#modal-trx-processing").modal("hide");
+                ResetProcessing();
+            }
+            //Customer Cancelling Tansaction from debit/credit/cancel selection screen during transaction after swipe card
+            else if (eData.find(element => element.Key === 'ERRORS' && element.Value === 'PinPadUserCancelled') !== undefined) {
+                swal({
+                    title: "Error!",
+                    text: "Customer Cancelled Transaction",
+                    type: "error",
+                    showCancelButton: false,
+                    confirmButtonClass: 'btn-danger',
+                    confirmButtonText: 'Close'
+                },
+                    function () {
+                        $("#modal-trx-processing").modal("hide");
+                        ResetProcessing();
+                        initFormPassthrough = true;
+                        DeviceCommForTrx.server.chipDNAOpenPassThruSession();
+                    }
+                );
+            }
+            //Customer Cancelling Tansaction from debit/credit/cancel selection screen during transaction after swipe card
+            else if (eData.find(element => element.Key === 'ERRORS' && element.Value === 'CardSchemeNotSupported') !== undefined) {
+                swal({
+                    title: "Error!",
+                    text: "Customer Card Scheme Not Supported",
+                    type: "error",
+                    showCancelButton: false,
+                    confirmButtonClass: 'btn-danger',
+                    confirmButtonText: 'Close'
+                },
+                    function () {
+                        $("#modal-trx-processing").modal("hide");
+                        ResetProcessing();
+                        initFormPassthrough = true;
+                        DeviceCommForTrx.server.chipDNAOpenPassThruSession();
+                    }
+                );
+            }
+            //Card is swiped instead of inserted
+            else if (eData.find(element => element.Key === 'NOTIFICATION' && element.Value === 'Swiped') !== undefined) {
+                cardSwiped = true;
+                $('#modal-trx-processing #smartwizard-trx-processing').smartWizard('next');
+                $("#modal-trx-processing #smartwizard-trx-processing-step1-text").html('Customer Swiped card');
+            }
+            //card swiped transaction result
+            else if (cardSwiped == true
+                && (eData.find(element => element.Key === 'TRANSACTION_RESULT' && element.Value === 'APPROVED') !== undefined)
+                && jsonResult.EventName === 'TransactionFinished') {
+                transactionJsonResult = jsonResult;
+                var sigVerifyIndex = eData.indexOf(eData.find(element => element.Key === 'SIGNATURE_VERIFICATION_REQUIRED'));
+                additionalFees = debitFees;
+                creditOrDebit = 'debit';
+                if (sigVerifyIndex >= 0 && eData[sigVerifyIndex].Value === 'True') {
+                    var sigCaptureIndex = eData.indexOf(eData.find(element => element.Key === 'SIGNATURE_CAPTURED'));
+                    var sigImageIndex = eData.indexOf(eData.find(element => element.Key === 'SIGNATURE_IMAGE'));
+                    if (eData[sigCaptureIndex].Value === 'True' && eData[sigImageIndex].Value.length > 0) {
+                        additionalFees = creditFees;
+                        creditOrDebit = 'credit';
+                        transactionJsonResult.ReceiptLines.push({ 'ReceiptEntryId': 'SIGNATURE_IMAGE', 'Value': eData[sigImageIndex].Value });
+                    }
+                }
+
+
+                transactionJsonResult.ReceiptLines.push({ 'ReceiptEntryId': 'Customer', 'Value' : $("#transactionOptionsCard .card-title").text() });
+                transactionJsonResult.ReceiptLines.push({ 'ReceiptEntryId': 'Clerk', 'Value' : '@((u.FirstName != null ? u.FirstName + " " : "") + (u.LastName != null ? u.LastName : ""))' });
+                transactionJsonResult.ReceiptLines.push({ 'ReceiptEntryId': 'SubTotal', 'Value': $("#transactionCard #amount").val().replace(',','') });
+                transactionJsonResult.ReceiptLines.push({ 'ReceiptEntryId': 'Fee', 'Value': additionalFees });
+                transactionResult = 'approved';
+                LogTransaction(transactionJsonResult, dlImage, 'Approved', 'inquiry', personid, personidcredentialid);
+                if (creditOrDebit == 'credit') {
+                    CreditCheckForLimit($("#transactionCard #amount").val().replace(',', ''),
+                        function (overLimit) {
+                            $("#modal-loading").modal("hide");
+                            if (overLimit !== true) {
+                                $('#modal-trx-processing #smartwizard-trx-processing').smartWizard('next');
+                                $("#modal-trx-processing #smartwizard-trx-processing-step3-text").html('Customer Signature submitted');
+                                DeviceCommForTrx.server.chipDNAClosePassThruSession();
+                                DeviceCommForTrx.server.chipDNAOpenPassThruSession();
+                            }
+                            else {
+                                $("#modal-trx-processing").modal("hide");
+                                ResetProcessing();
+                            }
+                        }
+                    );
+                }
+                if (creditOrDebit == 'debit') {
+                    DebitCheckForLimit($("#transactionCard #amount").val().replace(',', ''),
+                        function (overLimit) {
+                            $("#modal-loading").modal("hide");
+                            if (overLimit !== true) {
+                                $('#modal-trx-processing #smartwizard-trx-processing').smartWizard('next');
+                                $("#modal-trx-processing #smartwizard-trx-processing-step3-text").html('Customer Signature submitted');
+                                DeviceCommForTrx.server.chipDNAClosePassThruSession();
+                                DeviceCommForTrx.server.chipDNAOpenPassThruSession();
+                            }
+                            else {
+                                $("#modal-trx-processing").modal("hide");
+                                ResetProcessing();
+                            }
+                        }
+                    );
+                }
+            }
+            //Transaction is approved at preapproval, checks to see if signature was capture to use credit fees, if not debit fees will be used
+            else if (cardSwiped == false
+                && (eData.find(element => element.Key === 'TRANSACTION_RESULT' && element.Value === 'APPROVED') !== undefined)) {
+                transactionJsonResult = jsonResult;
+                var sigVerifyIndex = eData.indexOf(eData.find(element => element.Key === 'SIGNATURE_VERIFICATION_REQUIRED'));
+                additionalFees = debitFees;
+                creditOrDebit = 'debit';
+                if (sigVerifyIndex >= 0 && eData[sigVerifyIndex].Value === 'True') {
+                    var sigCaptureIndex = eData.indexOf(eData.find(element => element.Key === 'SIGNATURE_CAPTURED'));
+                    var sigImageIndex = eData.indexOf(eData.find(element => element.Key === 'SIGNATURE_IMAGE'));
+                    if (eData[sigCaptureIndex].Value === 'True' && eData[sigImageIndex].Value.length > 0) {
+                        additionalFees = creditFees;
+                        creditOrDebit = 'credit';
+                        transactionJsonResult.ReceiptLines.push({ 'ReceiptEntryId': 'SIGNATURE_IMAGE', 'Value': eData[sigImageIndex].Value });
+                    }
+                }
+
+
+                transactionJsonResult.ReceiptLines.push({ 'ReceiptEntryId': 'Customer', 'Value' : $("#transactionOptionsCard .card-title").text() });
+                transactionJsonResult.ReceiptLines.push({ 'ReceiptEntryId': 'Clerk', 'Value' : '@((u.FirstName != null ? u.FirstName + " " : "") + (u.LastName != null ? u.LastName : ""))' });
+                transactionJsonResult.ReceiptLines.push({ 'ReceiptEntryId': 'SubTotal', 'Value': $("#transactionCard #amount").val().replace(',', '') });
+                transactionJsonResult.ReceiptLines.push({ 'ReceiptEntryId': 'Fee', 'Value': additionalFees });
+                transactionResult = 'approved';
+                LogTransaction(transactionJsonResult, dlImage, 'Approved', 'inquiry', personid, personidcredentialid);
+                if (creditOrDebit == 'credit') {
+                    CreditCheckForLimit($("#transactionCard #amount").val().replace(',', ''),
+                        function (overLimit) {
+                            if (overLimit !== true) {
+                            }
+                            else {
+                                $("#modal-trx-processing").modal("hide");
+                                ResetProcessing();
+                            }
+                        }
+                    );
+                }
+                if (creditOrDebit == 'debit') {
+                    DebitCheckForLimit($("#transactionCard #amount").val().replace(',', ''),
+                        function (overLimit) {
+                            if (overLimit !== true) {
+                            }
+                            else {
+                                $("#modal-trx-processing").modal("hide");
+                                ResetProcessing();
+                            }
+                        }
+                    );
+                }
+            }
+            //Transaction is Declined at preapproval,
+            else if (eData.find(element => element.Key === 'TRANSACTION_RESULT' && element.Value === 'DECLINED') !== undefined) {
+                transactionJsonResult = jsonResult;
+                transactionResult = 'declined';
+                additionalFees = debitFees;
+                LogTransaction(transactionJsonResult, dlImage, 'Declined', 'inquiry', personid, personidcredentialid);
+                swal({
+                    title: "Error!",
+                    text: "Transaction Declined by Processor",
+                    type: "error",
+                    showCancelButton: false,
+                    confirmButtonClass: 'btn-danger',
+                    confirmButtonText: 'Close'
+                },
+                    function () {
+                        $("#modal-trx-processing").modal("hide");
+                        ResetProcessing();
+                    }
+                );
+                initFormPassthrough = true;
+                DeviceCommForTrx.server.chipDNAOpenPassThruSession();
+            }
+            //Opens passthrough after card is removed ending the chipDNA transaction process
+            else if (eData.find(element => element.Value === 'Removed') !== undefined) {
+                $('#modal-trx-processing #smartwizard-trx-processing').smartWizard('next');
+                $("#modal-trx-processing #smartwizard-trx-processing-step3-text").html('Customer Removed Card');
+                DeviceCommForTrx.server.chipDNAClosePassThruSession();
+                DeviceCommForTrx.server.chipDNAOpenPassThruSession();
+            }
+
+
+            //Sends custom forum with final transaction amount to be accepted or declined by customer
+            if (transactionResult == 'approved' && jsonResult.EventName === 'OpenPassThruSessionResponseEvent') {
+                if (creditOrDebit === 'credit' && creditReset == false) {
+                    creditReset = true;
+                    DeviceCommForTrx.server.chipDNAClosePassThruSession();
+                    DeviceCommForTrx.server.chipDNAOpenPassThruSession();
+                }
+                else {
+                var json = '{' +
+                    '"FormName":"preauthDone", ' +
+                    '"FormControls":[ ' +
+                    '{' +
+                    '    "ID" : 3,' +
+                    '        "Props": [' +
+                    '            {' +
+                    '                "Name": 32,' +
+                    '                "Type": 4,' +
+                    '                "Value": "No"' +
+                    '            }' +
+                    '        ]' +
+                    '},' +
+                    '{' +
+                    '    "ID" : 4,' +
+                    '        "Props": [' +
+                    '            {' +
+                    '                "Name": 32,' +
+                    '                "Type": 4,' +
+                    '                "Value": "Yes"' +
+                    '            }' +
+                    '        ]' +
+                    '}' +
+                    '],' +
+                    '"DisableAfterOneEvent":true,' +
+                    '"AddTextBoxTexts":[' +
+                    '{' +
+                    '    "ControlID":1,' +
+                    '    "Text":"Dollar Amount: $' + $("#transactionCard #amount").val().replace(',', '') + ' \nFee: $' + additionalFees + ' \n\nTotal: $' + parseFloat(($("#transactionCard #amount").val().replace(',', '') * 1) + (additionalFees * 1)).toFixed(2) + '"' +
+                    '},' +
+                    '{' +
+                    '    "ControlID\":2,' +
+                    '    "Text":"Do you accept this transaction?"' +
+                    '}' +
+                    ']' +
+                    '}';
+                    DeviceCommForTrx.server.chipDNAShowForm(json);
+                }
+            }
+
+            //Customer declines transaction finalization
+            if (transactionResult === 'approved'
+                && jsonResult.EventName === "PassThruResponseEvent"
+                && jsonResult.VerifoneHumanReadableResponse.split('<FS>')[0] === "XEVT"
+                && jsonResult.VerifoneHumanReadableResponse.split('<FS>')[1] === "2"
+                && jsonResult.VerifoneHumanReadableResponse.split('<FS>')[2] === "3"
+                && jsonResult.VerifoneHumanReadableResponse.split('<FS>')[3] === "0"
+                && jsonResult.VerifoneHumanReadableResponse.split('<FS>')[4] === "preauthDone") {
+                var json = '{ "FormName": "FA_INIT", "FormControls": [], "DisableAfterOneEvent": true, "AddTextBoxTexts": [] }';
+                DeviceCommForTrx.server.chipDNAShowForm(json);
+                var amount = $("#transactionCard #amount").val().replace(',', '');
+                amount = amount * 1.0;
+                additionalFees = additionalFees * 1.0;
+                var amountType = "Actual";
+                var terminalLanguage = "eng";
+                var transactionType = "Sale";
+
+                var json = '{ Amount: "' + amount +
+                    '", AmountType: "' + amountType +
+                    '", Fee: "' + additionalFees +
+                    '", Reference: "' + referenceNumber +
+                    '", TerminalLanguage: "' + terminalLanguage +
+                    '", TransactionType: "' + transactionType +
+                    '", ReceiptLines: ' + JSON.stringify(transactionJsonResult.ReceiptLines) + ' }';
+                DeviceCommForTrx.server.chipDNAVoidTransaction(referenceNumber);
+
+                $('#modal-trx-processing #smartwizard-trx-processing').smartWizard('next');
+                $("#modal-trx-processing #smartwizard-trx-processing-step4-text").html('Customer Declined Fees');
+            }
+
+            //Customer accepts transaction finalization
+            if (transactionResult === 'approved'
+                && jsonResult.EventName === "PassThruResponseEvent"
+                && jsonResult.VerifoneHumanReadableResponse.split('<FS>')[0] === "XEVT"
+                && jsonResult.VerifoneHumanReadableResponse.split('<FS>')[1] === "2"
+                && jsonResult.VerifoneHumanReadableResponse.split('<FS>')[2] === "4"
+                && jsonResult.VerifoneHumanReadableResponse.split('<FS>')[3] === "0"
+                && jsonResult.VerifoneHumanReadableResponse.split('<FS>')[4] === "preauthDone") {
+                var json = '{ "FormName": "FA_INIT", "FormControls": [], "DisableAfterOneEvent": true, "AddTextBoxTexts": [] }';
+                DeviceCommForTrx.server.chipDNAShowForm(json);
+
+                var amount = $("#transactionCard #amount").val().replace(',', '');
+                amount = amount * 1.0;
+                additionalFees = additionalFees * 1.0;
+                var amountType = "Actual";
+                var terminalLanguage = "eng";
+                var transactionType = "Sale";
+
+                var json = '{ Amount: "' + amount +
+                    '", AmountType: "' + amountType +
+                    '", Fee: "' + additionalFees +
+                    '", Reference: "' + referenceNumber +
+                    '", TerminalLanguage: "' + terminalLanguage +
+                    '", TransactionType: "' + transactionType +
+                    '", ReceiptLines: ' + JSON.stringify(transactionJsonResult.ReceiptLines) + ' }';
+                DeviceCommForTrx.server.chipDNAConfirmTransction(json);
+                $('#modal-trx-processing #smartwizard-trx-processing').smartWizard('next');
+                $("#modal-trx-processing #smartwizard-trx-processing-step4-text").html('Customer Accepted Fees');
+            }
+
+            //After Transaction is confirmed, Logs transaction for approved
+            if (transactionResult === 'approved'
+                && jsonResult.InfoMessage === 'Approved') {
+                AmountEnteredByClerk = $("#transactionCard #amount").val().replace(',', '') * 1;
+
+                if (g_IsPayoutCashOnlyForCurrentCasino) {//directly finish everything, do not show the split pay modal.
+                    LogThenPrint(transactionJsonResult, dlImage, 'Approved', creditOrDebit, personid, personidcredentialid);
+                    //needed in case next transaction is credit
+                    creditReset = false;
+
+                    
+                    //begin Save the cashonly amount to TransactionPayouts Table
+                    var cashAmountForCashOnlyPayOption = AmountEnteredByClerk;  //since no other forms of pay.
+                    var chipAmountForCashOnlyPayOption = 0;
+                    var titoAmountForCashOnlyPayOption = 0;
+                    SavePayoutTypeForCurrentTransaction(g_transactionId, chipAmountForCashOnlyPayOption, cashAmountForCashOnlyPayOption, titoAmountForCashOnlyPayOption, AmountEnteredByClerk);
+                    //end save cash amt to TransactionPayouts Table
+
+                    swal({
+                        title: "Success",
+                        text: "Successfully processed transaction, please payout the amount of $" + $("#transactionCard #amount").val() + ".",
+                        type: "info",
+                        showCancelButton: false,
+                        confirmButtonClass: 'btn-danger',
+                        confirmButtonText: 'Close'
+                    },
+                        function () {
+                                //closing modal here as per tim
+                                $("#modal-trx-processing").modal("hide");
+                                $("#modal-person-dl-match").modal("hide");
+                                $("#transactionCard").addClass("d-none");
+                                $("#personInfoCard").removeClass("d-none");
+                            }
+                    );
+                }
+                else {
+                     //need to show a modal that has the prompts payout info.
+                    $('#SplitPayModal').modal('show');
+
+                    $('#TotalAmount').val('$'.concat($("#transactionCard #amount").val().replace(',', '')));   
+
+                    //removing the scroll bars from modal. 
+                    $('.modal-open .modal').css("overflow-y", "hidden");
+                }
+
+
+
+
+            }
+
+            //Customer Declined Fees and Voided returned from FDC
+            if (jsonResult.InfoMessage === 'Voided') {
+                swal({
+                    title: "Error!",
+                    text: "Customer Declined Transaction at Finalization.",
+                    type: "error",
+                    showCancelButton: false,
+                    confirmButtonClass: 'btn-danger',
+                    confirmButtonText: 'Close'
+                },
+                    function () {
+                        $("#modal-trx-processing").modal("hide");
+                        ResetProcessing();
+                    }
+                );
+            }
+
+            //After Transaction is confirmed, Logs transaction for declined
+            if (transactionResult === 'approved'
+                && jsonResult.InfoMessage === 'Declined') {
+                console.log('Confirmed Declined Transaction');
+
+                //record transaction here send transactionJsonResult and dlImage to controller
+
+                LogTransaction(transactionJsonResult, dlImage, 'Declined', creditOrDebit, personid, personidcredentialid);
+                //needed in case next transaction is credit
+                creditReset = false;
+
+                //closing modal here as per tim
+                $("#modal-person-dl-match").modal("hide");
+                $("#transactionCard").addClass("d-none");
+                $("#personInfoCard").removeClass("d-none");
+            }
+        });
+
+        //listens to error messages from verifone
+        DeviceCommForTrx.on('chipDNAErrorMessage', function (message) {
+            var jsonResult = JSON.parse(message);
+
+            if (jsonResult.ErrorMessage === 'AmountTooLarge'
+                && jsonResult.EventName === 'PerformStartTransaction') {
+
+                swal({
+                    title: "Error!",
+                    text: "Amount Too Large",
+                    type: "error",
+                    showCancelButton: false,
+                    confirmButtonClass: 'btn-danger',
+                    confirmButtonText: 'Close'
+                },
+                    function () {
+                        $("#modal-trx-processing").modal("hide");
+                        ResetProcessing();
+                    }
+                );
+
+                initFormPassthrough = true;
+                DeviceCommForTrx.server.chipDNAOpenPassThruSession();
+            }
+        });
+
+        $.connection.hub.logging = true;
+        // Start the connection.
+        $.connection.hub.start().done(function () {
+            console.log('started listening for TrxCard messages');
+        });
+    }
+
+    //the one method in jquery will make sure only one request is sent even if we click multiple time when passing payouts. So we dont save duplicate transaction in transactionPayout table. 
+    $('#splitPaySubmitBtn').click(function (e) {
+        e.preventDefault();
+
+        var transactionId = g_transactionId;
+        var chipAmt = $('#ChipPayout').val();
+        var cashAmt = $('#CashPayout').val();
+        var titoAmt = $('#TitoPayout').val();
+        var amount = $("#transactionCard #amount").val().replace(',', '') * 1;
+
+        if (!chipAmt) {
+            chipAmt = 0; 
+        }
+        if (!cashAmt) {
+            cashAmt = 0;
+        }
+        if (!titoAmt) {
+            titoAmt = 0;
+        }
+
+        var totalPayoutAmount = (chipAmt.toString() * 1) + (cashAmt.toString() * 1) + (titoAmt.toString() * 1);
+
+        
+
+        //if entered amount is equal to total payout amount , save payout
+        if (amount === totalPayoutAmount) {
+            $.ajax({
+                type: "POST",
+                url: '@Url.Action("SaveTransactionPayouts", "Transaction")',
+                dataType: "html",
+                data: JSON.stringify({ 'transactionId': transactionId, 'chipAmt': chipAmt, 'cashAmt': cashAmt, 'titoAmt': titoAmt, 'amount': amount }),
+                contentType: 'application/json',
+                success: function (data) {
+                    swal({
+                        title: "Success",
+                        text: "Successfully processed transaction, please payout the amount of $" + $("#transactionCard #amount").val() + ".",
+                        type: "info",
+                        showCancelButton: false,
+                        confirmButtonClass: 'btn-danger',
+                        confirmButtonText: 'Close'
+                    },
+                        function () {
+                            //closing modal here as per tim
+                            $("#modal-trx-processing").modal("hide");
+                            $("#modal-person-dl-match").modal("hide");
+                            $("#transactionCard").addClass("d-none");
+                            $("#personInfoCard").removeClass("d-none");
+                            
+                            //refresh page after clicking ok on sweet alert.
+                            //$('#SplitPayModal').modal('hide');
+                            window.location.reload(true);
+                        }
+                    );
+
+                },
+                error: function (xhr, ajaxOptions, thrownError) {
+                }
+            });
+
+            e.stopImmediatePropagation(); // to prevent more than once submission, even if multiple clicks (https://stackoverflow.com/questions/51349042/how-to-submit-jquery-ajax-post-request-only-once)
+            return false;
+
+        }
+        else {
+            //show some message in modal. 
+            $("#errMessage").show();
+        }
+
+
+    })
+
+    $('#closeModalAndRefresh').on('click', function (e) {
+        e.preventDefault();
+        window.location.reload(true);
+
+    });
+
+
+    function SavePayoutTypeForCurrentTransaction(g_transactionId, chipAmt, cashAmt, titoAmt, amount) {
+        
+        $.ajax({
+            type: "POST",
+            url: '@Url.Action("SaveTransactionPayouts", "Transaction")',
+            dataType: "html",
+            data: JSON.stringify({ 'transactionId': g_transactionId, 'chipAmt': chipAmt, 'cashAmt': cashAmt, 'titoAmt': titoAmt, 'amount': amount }),
+            contentType: 'application/json',
+            success: function (data) {
+            },
+            error: function (xhr, ajaxOptions, thrownError) {
+            }
+        })
+    }//function close
+</script>
